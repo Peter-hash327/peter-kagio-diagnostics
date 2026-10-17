@@ -1,26 +1,69 @@
 import os
 from flask import Flask, request, jsonify
 import requests
+import openai
 
 app = Flask(__name__)
 
-# Environment variables configured in hosting platform
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "peter_kagio_verify_token")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Environment Variables
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "peter_kagio_verify_token")
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-PETER_KAGIO_SYSTEM_PROMPT = """
-You are an expert AI Master Diagnostic Technician operating on behalf of Peter Kagio, 
-a senior Mercedes-Benz Heavy-Duty Commercial Vehicle Specialist (Contact: 0722710633). 
-Provide automated diagnostic quotes, repair steps, ASCII pinouts, and triage advice 
-for Mercedes-Benz commercial vehicles (Actros, Axor, Atego, Arocs). 
-Always maintain a professional, practical tone and include Peter Kagio's contact details for escalations.
-"""
+openai.api_key = OPENAI_API_KEY
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Peter Kagio Mercedes Diagnostic Webhook is Live!", 200
+# Dictionary to track simple user session states in memory
+user_sessions = {}
+
+def send_whatsapp_message(to_number, message_text):
+    """Sends a text message back to the user via WhatsApp Cloud API."""
+    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "text",
+        "text": {"body": message_text}
+    }
+    response = requests.post(url, headers=headers, json=data)
+    return response.json()
+
+def get_menu_text():
+    return (
+        "Hello! Welcome to Peter Kagio Technical Services.\n\n"
+        "How can we assist you today? Please reply with a number:\n\n"
+        "1️⃣ Vehicle Diagnostics & Technical Support (Mercedes-Benz Heavy-Duty Trucks)\n"
+        "2️⃣ General Inquiry / Personal Message for Peter\n\n"
+        "Reply with 1 or 2 to proceed."
+    )
+
+def generate_ai_diagnostic_response(user_query):
+    """Generates heavy-duty truck diagnostic response using GPT-4o."""
+    system_prompt = (
+        "You are an expert Mercedes-Benz Heavy-Duty Truck Diagnostic Assistant working for "
+        "Peter Kagio Automotive Technical Services in Kenya. "
+        "Provide precise diagnostic guidance for models like Actros, Axor, Atego, and Arocs. "
+        "Include fault code meanings, component locations, pinout data or ASCII diagrams when helpful, "
+        "and troubleshooting steps. Always advise contacting Peter directly at 0722710633 for hands-on assistance."
+    )
+    
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_query}
+            ],
+            max_tokens=800,
+            temperature=0.3
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"An error occurred while generating diagnostic data. Please call Peter directly at 0722710633."
 
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
@@ -33,63 +76,63 @@ def verify_webhook():
             return challenge, 200
         else:
             return "Verification failed", 403
-    return "Webhook Endpoint Ready", 200
+    return "Hello World", 200
 
 @app.route("/webhook", methods=["POST"])
-def receive_whatsapp_message():
-    body = request.get_json()
-    try:
-        if "object" in body and body["object"] == "whatsapp_business_account":
-            for entry in body["entry"]:
-                for change in entry["changes"]:
-                    value = change.get("value", {})
-                    if "messages" in value:
-                        message_data = value["messages"][0]
-                        sender_phone = message_data["from"]
-                        message_body = message_data["text"]["body"]
+def webhook():
+    data = request.get_json()
 
-                        diagnostic_reply = generate_diagnostic_reply(message_body)
-                        send_whatsapp_message(sender_phone, diagnostic_reply)
+    if data.get("object"):
+        if (
+            data.get("entry") and
+            data["entry"][0].get("changes") and
+            data["entry"][0]["changes"][0].get("value") and
+            data["entry"][0]["changes"][0]["value"].get("messages")
+        ):
+            message = data["entry"][0]["changes"][0]["value"]["messages"][0]
+            sender_id = message["from"]
+            message_body = message.get("text", {}).get("body", "").strip()
 
-            return jsonify({"status": "success"}), 200
-    except Exception as e:
-        print(f"Error processing webhook: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+            current_state = user_sessions.get(sender_id)
 
-def generate_diagnostic_reply(client_prompt):
-    api_url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "gpt-4o",
-        "messages": [
-            {"role": "system", "content": PETER_KAGIO_SYSTEM_PROMPT},
-            {"role": "user", "content": client_prompt}
-        ],
-        "temperature": 0.2
-    }
-    
-    response = requests.post(api_url, json=payload, headers=headers)
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        return "Diagnostic engine processing error. Contact Peter Kagio directly at 0722710633."
+            # Handle response based on user input
+            if message_body.lower() in ["menu", "hi", "hello", "start", "reset"]:
+                user_sessions[sender_id] = "menu"
+                send_whatsapp_message(sender_id, get_menu_text())
 
-def send_whatsapp_message(recipient_phone, text_message):
-    url = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": recipient_phone,
-        "type": "text",
-        "text": {"body": text_message}
-    }
-    requests.post(url, json=payload, headers=headers)
+            elif current_state == "menu" or current_state is None:
+                if message_body == "1":
+                    user_sessions[sender_id] = "diagnostics"
+                    send_whatsapp_message(
+                        sender_id,
+                        "🚚 **Mercedes-Benz Heavy-Duty Vehicle Diagnostics**\n\n"
+                        "Please provide your truck model (e.g., Actros, Axor) and describe the fault, symptom, or fault code."
+                    )
+                elif message_body == "2":
+                    user_sessions[sender_id] = "general"
+                    send_whatsapp_message(
+                        sender_id,
+                        "Thank you for reaching out! Your message has been received.\n\n"
+                        "Peter will reply to you directly as soon as possible. "
+                        "If urgent, feel free to call directly at 0722710633."
+                    )
+                else:
+                    user_sessions[sender_id] = "menu"
+                    send_whatsapp_message(sender_id, get_menu_text())
+
+            elif current_state == "diagnostics":
+                ai_reply = generate_ai_diagnostic_response(message_body)
+                send_whatsapp_message(sender_id, ai_reply)
+
+            elif current_state == "general":
+                send_whatsapp_message(
+                    sender_id,
+                    "Message received. Peter will get back to you shortly!"
+                )
+
+        return jsonify({"status": "success"}), 200
+
+    return "Not Found", 404
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=5000)
