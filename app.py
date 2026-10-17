@@ -13,7 +13,6 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 openai.api_key = OPENAI_API_KEY
 
-# Dictionary to track simple user session states in memory
 user_sessions = {}
 
 def send_whatsapp_message(to_number, message_text):
@@ -34,21 +33,26 @@ def send_whatsapp_message(to_number, message_text):
 
 def get_menu_text():
     return (
-        "Hello! Welcome to Peter Kagio Technical Services.\n\n"
+        "Welcome to *Automac Technical Solutions*! 🛠️\n"
+        "Your trusted Mercedes-Benz Heavy-Duty Truck & Technical Engineering Hub.\n\n"
         "How can we assist you today? Please reply with a number:\n\n"
-        "1️⃣ Vehicle Diagnostics & Technical Support (Mercedes-Benz Heavy-Duty Trucks)\n"
-        "2️⃣ General Inquiry / Personal Message for Peter\n\n"
-        "Reply with 1 or 2 to proceed."
+        "1️⃣ Mercedes-Benz Truck Diagnostics & Fault Codes\n"
+        "2️⃣ Purchase Digital Training Guides & Technical Manuals\n"
+        "3️⃣ Technical Consultations & Remote Diagnostic Support\n"
+        "4️⃣ Technician Training Programs & Skill Modules\n"
+        "5️⃣ General Inquiry / Direct Contact with Peter\n\n"
+        "Reply with 1, 2, 3, 4, or 5 to proceed."
     )
 
 def generate_ai_diagnostic_response(user_query):
     """Generates heavy-duty truck diagnostic response using GPT-4o."""
     system_prompt = (
-        "You are an expert Mercedes-Benz Heavy-Duty Truck Diagnostic Assistant working for "
-        "Peter Kagio Automotive Technical Services in Kenya. "
+        "You are an expert Mercedes-Benz Heavy-Duty Truck Diagnostic Specialist representing "
+        "Automac Technical Solutions in Kenya. "
         "Provide precise diagnostic guidance for models like Actros, Axor, Atego, and Arocs. "
         "Include fault code meanings, component locations, pinout data or ASCII diagrams when helpful, "
-        "and troubleshooting steps. Always advise contacting Peter directly at 0722710633 for hands-on assistance."
+        "and troubleshooting steps. Always advise contacting Peter Kagio directly at 0722710633 for hands-on assistance "
+        "or booking full diagnostic consultations."
     )
     
     try:
@@ -63,7 +67,7 @@ def generate_ai_diagnostic_response(user_query):
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"An error occurred while generating diagnostic data. Please call Peter directly at 0722710633."
+        return "An error occurred while generating diagnostic data. Please contact Peter Kagio directly at 0722710633."
 
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
@@ -95,8 +99,7 @@ def webhook():
 
             current_state = user_sessions.get(sender_id)
 
-            # Handle response based on user input
-            if message_body.lower() in ["menu", "hi", "hello", "start", "reset"]:
+            if message_body.lower() in ["menu", "hi", "hello", "start", "reset", "automac"]:
                 user_sessions[sender_id] = "menu"
                 send_whatsapp_message(sender_id, get_menu_text())
 
@@ -105,16 +108,42 @@ def webhook():
                     user_sessions[sender_id] = "diagnostics"
                     send_whatsapp_message(
                         sender_id,
-                        "🚚 **Mercedes-Benz Heavy-Duty Vehicle Diagnostics**\n\n"
-                        "Please provide your truck model (e.g., Actros, Axor) and describe the fault, symptom, or fault code."
+                        "🚚 *Automac Diagnostic Assistant*\n\n"
+                        "Please state your Mercedes-Benz truck model (e.g., Actros, Axor) and describe the fault code or symptom."
                     )
                 elif message_body == "2":
+                    user_sessions[sender_id] = "menu"
+                    send_whatsapp_message(
+                        sender_id,
+                        "📚 *Automac Digital Training Materials*\n\n"
+                        "We offer practical 10-module training guides for Mercedes truck technicians.\n\n"
+                        "🔗 Access materials here: https://linktr.ee/automac.ke\n\n"
+                        "Reply *MENU* to return to the main menu."
+                    )
+                elif message_body == "3":
+                    user_sessions[sender_id] = "menu"
+                    send_whatsapp_message(
+                        sender_id,
+                        "💻 *Technical Consultations & Remote Support*\n\n"
+                        "Peter Kagio offers specialized virtual/remote diagnostic sessions using DAS/Xentry and ThinkDiag tools.\n\n"
+                        "To schedule a session, call or message directly at +254 722 710 633.\n\n"
+                        "Reply *MENU* to return to the main menu."
+                    )
+                elif message_body == "4":
+                    user_sessions[sender_id] = "menu"
+                    send_whatsapp_message(
+                        sender_id,
+                        "🎓 *Automac Technician Training Programs*\n\n"
+                        "Enhance your technical skills with our structured heavy-duty automotive training modules.\n\n"
+                        "Contact Peter at 0722710633 for upcoming schedule and enrollment details.\n\n"
+                        "Reply *MENU* to return to the main menu."
+                    )
+                elif message_body == "5":
                     user_sessions[sender_id] = "general"
                     send_whatsapp_message(
                         sender_id,
-                        "Thank you for reaching out! Your message has been received.\n\n"
-                        "Peter will reply to you directly as soon as possible. "
-                        "If urgent, feel free to call directly at 0722710633."
+                        "Thank you for reaching out to Peter Kagio at Automac Technical Solutions.\n\n"
+                        "Your message has been logged, and Peter will get back to you shortly."
                     )
                 else:
                     user_sessions[sender_id] = "menu"
@@ -127,7 +156,7 @@ def webhook():
             elif current_state == "general":
                 send_whatsapp_message(
                     sender_id,
-                    "Message received. Peter will get back to you shortly!"
+                    "Message received! Peter will respond as soon as possible."
                 )
 
         return jsonify({"status": "success"}), 200
